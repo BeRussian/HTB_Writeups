@@ -1,0 +1,4 @@
+# Nmap 7.95 scan initiated Thu Nov  6 12:50:24 2025 as: /usr/lib/nmap/nmap --privileged -p 21 -sV -oA Vaccine --script=vuln 10.129.95.174
+Host: 10.129.95.174 ()	Status: Up
+Host: 10.129.95.174 ()	Ports: 21/open/tcp//ftp//vsftpd 3.0.3/
+# Nmap done at Thu Nov  6 12:50:37 2025 -- 1 IP address (1 host up) scanned in 12.73 seconds
